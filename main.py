@@ -3,8 +3,18 @@ import random
 import copy
 
 BAD_MOVE_COST = -1000 # The cost of an illegal 'move'.
-RENT_RATE = 5 # Average number of customers per day
-DISCOUNT_RATE = 0.8 # The future value of money (i.e., tomorrow's money is today worth DISCOUNT_RATE*(what it is worth tomorrow))
+RENT_RATE     = 5     # Average number of customers per day
+DISCOUNT_RATE = 0.8   # The future value of money (i.e., tomorrow's money is today worth DISCOUNT_RATE*(what it is worth tomorrow))
+RENTAL_INCOME = 10
+TRANSFER_COST = 2
+
+
+##    We start by setting up the world. A state of the world is characterized by the
+##    states of the two car rental branches.
+##
+##    A state of a single rental branch is characterized by (1) the total car capacity
+##    of the branch, (2) how many cars are ready for rental, and (3) how many cars are
+##    currently being serviced and will be ready for rental the next day.
 
 class RentalBranch:
     """Car rental branch. It has a maximum capacity of cars (maxCapacity), cars which are available for hire (available)
@@ -20,11 +30,13 @@ and cars which need one day of service before they become available (queued).
 Raises exception if more cars are attempted removed than are available."""
 
         if carTransfers < 0:
+            # When removing cars, make sure we don't go below 0 (if so raise exception)
             if self.available + carTransfers < 0:
-                raise NotEnoughCarsException()
-            else:
+                raise NotEnoughCarsException() 
+            else:                
                 self.available += carTransfers
         else:
+            # When adding cars, cars exceeding the maximum capacity are thrown into a giant trash compactor
             freeSpots = self.maxCapacity - self.available - self.queued
             self.available += min(carTransfers, freeSpots)
 
@@ -36,6 +48,12 @@ Raises exception if more cars are attempted removed than are available."""
 
     def __hash__(self):
         return hash((self.maxCapacity, self.available, self.queued))
+
+class NotEnoughCarsException(BaseException):
+    """Signifies insufficient cars in rental lot for intended operation."""    
+    pass
+
+##    The state of the world consists of the states of rental branch A and B
                 
 class State:
     """A state of the game. Determined by two rental branches, branchA and branchB."""
@@ -53,6 +71,11 @@ class State:
     def __hash__(self):
         return hash((self.branchA, self.branchB))
 
+
+##    Our ultimate aim is to construct an optimal policy for transfers between the
+##    branches A and B. A policy maps a state of the world to the signed number of
+##    cars to be transferred from A to B.
+
 class Policy:
     """A policy for transferring cars between rental branches.
 
@@ -69,6 +92,11 @@ signify a net transfer from B to A.
 
     def __setitem__(self, key, value):
         self.stateToActionMap[key]=value
+
+##    To construct a policy we need to have an estimate of the value of each state of the
+##    world under the mythical optimal policy. I.e., a dictionary with keys being states
+##    and the values being dollar value estimates. The ValueMap stores this information
+##    for us.
 
 class ValueMap:
     """Map (dictionary) of state to estimated dollar value"""
@@ -91,14 +119,14 @@ class ValueMap:
     def __setitem__(self, key, value):
         self.valueMap[key]=value
 
-class NotEnoughCarsException(BaseException):
-    """Signifies insufficient cars in rental lot for intended operation."""    
-    pass
 
+##    Finally, we need algorithms for evaluating the value of of states and actions
+##    under given state value estimates and policies. In writing these algorithms
+##    it is very handy to have iteraters over all possible states and actions.
 
 def stateIter(maxCapacity):
     """Iterator over all possible states for two branches with specified maximum capacity"""
-    for totalA in range(maxCapacity+1):
+    for totalA in range(maxCapacity+1): 
         for queuedA in range(totalA+1):
             branchA = RentalBranch(maxCapacity, totalA-queuedA, queuedA)
             for totalB in range(maxCapacity+1):
@@ -117,32 +145,44 @@ def estimateStateValue(state, valueMap, policy):
 def estimateActionValue(state, action, valueMap):
     """Estimate the value of a state/action pair given the values of the other states"""
 
+    ##    The estimated value of a (state, action) pair is found as follows:
+    ##    1. Transfers cars according to the action and record the transfer cost
+    ##    2. Construct the possible rental scenarios (a Poisson distribution of customers for each branch)
+    ##    3. For each scenario, (a) record rental income, (b) move rented cars to queued and queued to available,
+    ##        (c) record discounted future income from the new state according to the value map
+    ##    4. Estimated value is transfer cost + probability-weighted sum of rental income and new state value
+    ##        for each scenario in 3.
+
     # Create copies of the branches as we will modify them with car transfers
     branchA = copy.copy(state.branchA)
     branchB = copy.copy(state.branchB)
 
-    transferIncome = -2 * abs(action) # We always pay so it's always non-positive
+    # Transfer cars and record transfer costs
+    Income = - TRANSFER_COST * abs(action) # We always pay so it's always non-positive
     try:
         branchA.transferCars(-action)
         branchB.transferCars(action)
     except NotEnoughCarsException:
         return BAD_MOVE_COST
 
-    rentProbA = [(RENT_RATE**n) / math.factorial(n) * math.exp(-RENT_RATE) for n in range(branchA.available)]
-    rentProbA.append(1-sum(rentProbA)) # Customers equal or exceed available cars
+    # Construct probabilities for each rental scenario. Note that if customer count exceeds
+    # the number of available cars, we turn away the extra customers.
+    rentProbA = rentalProbabilities(branchA.available)
+    rentProbB = rentalProbabilities(branchB.available)
 
-    rentProbB = [(RENT_RATE**n) / math.factorial(n) * math.exp(-RENT_RATE) for n in range(branchB.available)]
-    rentProbB.append(1-sum(rentProbB)) # Customers equal or exceed available cars
-
-    value = transferIncome
     for (custA, probA) in enumerate(rentProbA):
         newBranchA = RentalBranch(branchA.maxCapacity, branchA.available - custA + branchA.queued, custA)
         for (custB, probB) in enumerate(rentProbB):
             newBranchB = RentalBranch(branchB.maxCapacity, branchB.available - custB + branchB.queued, custB)
-            value += probA*probB*( (custA+custB)*10 + DISCOUNT_RATE*valueMap[State(newBranchA, newBranchB)] )
+            Income += probA*probB*( (custA+custB)*RENTAL_INCOME + DISCOUNT_RATE*valueMap[State(newBranchA, newBranchB)] )
 
-    return value
-    
+    return Income
+
+def rentalProbabilities(available):
+    """List of probabilities for number of cars rented out. Index signifies number of cars, value is probability."""
+    rentProb = [(RENT_RATE**n) / math.factorial(n) * math.exp(-RENT_RATE) for n in range(available)] # Poission distribution
+    rentProb.append(1-sum(rentProb)) # Customers equal or exceed available cars
+    return rentProb
 
 def printPolicy(policy):
     """ASCII representation of the policy.
