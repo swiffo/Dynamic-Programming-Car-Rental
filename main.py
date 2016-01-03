@@ -2,12 +2,14 @@ import math
 import random
 import copy
 
-MAX_CAPACITY = 20 # On second thought, don't use this
-BAD_MOVE_COST = -1000
-RENT_RATE = 5
-DISCOUNT_RATE = 0.8
+BAD_MOVE_COST = -1000 # The cost of an illegal 'move'.
+RENT_RATE = 5 # Average number of customers per day
+DISCOUNT_RATE = 0.8 # The future value of money (i.e., tomorrow's money is today worth DISCOUNT_RATE*(what it is worth tomorrow))
 
 class RentalBranch:
+    """Car rental branch. It has a maximum capacity of cars (maxCapacity), cars which are available for hire (available)
+and cars which need one day of service before they become available (queued).
+"""
     def __init__(self, maxCapacity, available, queued):
         self.maxCapacity = maxCapacity
         self.available = available
@@ -36,6 +38,7 @@ Raises exception if more cars are attempted removed than are available."""
         return hash((self.maxCapacity, self.available, self.queued))
                 
 class State:
+    """A state of the game. Determined by two rental branches, branchA and branchB."""
     def __init__(self, branchA, branchB):
         self.branchA = branchA
         self.branchB = branchB
@@ -51,17 +54,15 @@ class State:
         return hash((self.branchA, self.branchB))
 
 class Policy:
-    """A policy for transferring cars between rental branches."""
+    """A policy for transferring cars between rental branches.
 
-    # Possibly have max capacity as a member here, possibly throw exception in actionFromState
+Essentially a dictionary which maps states to an amount of cars to transfer from branch A to B. Negative numbers
+signify a net transfer from B to A.
+"""
 
     def __init__(self, maxCapacity):
-        self.maxCapacity = maxCapacity
+        self.maxCapacity = maxCapacity # We model the policy as a sparse map so we need maxCapacity to know what the limits are
         self.stateToActionMap = dict()
-
-    def actionFromState(self, state):
-        """Takes in a State instance and returns number of cars to transfer from branch A to B"""
-        return self.stateToActionMap.get(state, 0)
 
     def __getitem__(self, key):
         return self.stateToActionMap.get(key, 0)
@@ -69,8 +70,9 @@ class Policy:
     def __setitem__(self, key, value):
         self.stateToActionMap[key]=value
 
-
 class ValueMap:
+    """Map (dictionary) of state to estimated dollar value"""
+    
     def __init__(self):
         self.valueMap = dict() # State instance to value
 
@@ -82,9 +84,6 @@ class ValueMap:
                     for qB in range(totalB+1):
                         branchB = RentalBranch(maxCapacity, totalB-qB, qB)
                         self.valueMap[State(branchA, branchB)] = random.uniform(0,10)
-
-    def value(self, state):
-        return self.valueMap[state]
 
     def __getitem__(self, key):
         return self.valueMap[key]
@@ -98,6 +97,7 @@ class NotEnoughCarsException(BaseException):
 
 
 def stateIter(maxCapacity):
+    """Iterator over all possible states for two branches with specified maximum capacity"""
     for totalA in range(maxCapacity+1):
         for queuedA in range(totalA+1):
             branchA = RentalBranch(maxCapacity, totalA-queuedA, queuedA)
@@ -111,9 +111,13 @@ def actionIter(state):
     return range(-state.branchB.available, state.branchA.available+1)
 
 def estimateStateValue(state, valueMap, policy):
+    """Estimate the value of a state given the values of other states and a policy"""
     return estimateActionValue(state, policy[state], valueMap)
 
 def estimateActionValue(state, action, valueMap):
+    """Estimate the value of a state/action pair given the values of the other states"""
+
+    # Create copies of the branches as we will modify them with car transfers
     branchA = copy.copy(state.branchA)
     branchB = copy.copy(state.branchB)
 
@@ -137,11 +141,17 @@ def estimateActionValue(state, action, valueMap):
             newBranchB = RentalBranch(branchB.maxCapacity, branchB.available - custB + branchB.queued, custB)
             value += probA*probB*( (custA+custB)*10 + DISCOUNT_RATE*valueMap[State(newBranchA, newBranchB)] )
 
-##    print('Estimated value for ({0}, {1}): {2}'.format(state, action, value))
     return value
     
 
 def printPolicy(policy):
+    """ASCII representation of the policy.
+
+Shows a matrix of the transfers to be made given the available cars in the two branches (A vertical, B horizontal).
+The policy is shown for 0 queued cars.
+
+Transfer values are shown as absolutes (to fit everything below 10 in a single cell).
+"""
     printRows = []
     maxCapacity = policy.maxCapacity
     for availableA in range(maxCapacity, -1, -1):
@@ -171,33 +181,19 @@ def main(maxCapacity):
                 oldValue = valueMap[state]
                 newValue = estimateStateValue(state, valueMap, policy)
                 valueMap[state] = newValue
-##                if abs(newValue-oldValue) > maxValueChange:
-##                    print('Big change for {0}: {1}'.format(state, newValue - oldValue))
                 maxValueChange = max(maxValueChange, abs(newValue-oldValue))
-##            print('Value change is {0}'.format(maxValueChange))
 
         # Update the policy again
         print("*** Updating policy ***")
         policyChanged = False
 
-        oldState = None #Remove everything related to this
-
         for state in stateIter(maxCapacity):
-##            print('Updating for state {0}'.format(state))
             actionVals = [(a, estimateActionValue(state, a, valueMap)) for a in actionIter(state)]
             best = max(actionVals, key=lambda e: e[1])
             if policy[state] != best[0]: # HORRORS if multiple best actions and we switch back and forth
                 policyChanged=True
-##                print('Changing policy for {0} from {1} to {2}'.format(state, policy[state], best[0]))
                 policy[state]=best[0]
-##                print('New policy for {0} is {1}'.format(state, policy[state]))
-##                if oldState is not None:
-##                    print('Policy for old {0} is {1}'.format(oldState, policy[oldState]))
                 oldState = state
-##
-##        for k,v in policy.stateToActionMap.items():
-##            if v != 0:
-##                print("^^^ {0} ~ {1}".format(k,v))
 
     print('\n\n**********************\n\n')
     printPolicy(policy)
