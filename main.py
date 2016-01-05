@@ -4,7 +4,7 @@ import copy
 
 BAD_MOVE_COST = -1000 # The cost of an illegal 'move'.
 RENT_RATE     = 5     # Average number of customers per day
-DISCOUNT_RATE = 0.8   # The future value of money (i.e., tomorrow's money is today worth DISCOUNT_RATE*(what it is worth tomorrow))
+DISCOUNT_RATE = 0.9   # The future value of money (i.e., tomorrow's money is today worth DISCOUNT_RATE*(what it is worth tomorrow))
 RENTAL_INCOME = 10
 TRANSFER_COST = 2
 
@@ -180,7 +180,7 @@ def estimateActionValue(state, action, valueMap):
 
 def rentalProbabilities(available):
     """List of probabilities for number of cars rented out. Index signifies number of cars, value is probability."""
-    rentProb = [(RENT_RATE**n) / math.factorial(n) * math.exp(-RENT_RATE) for n in range(available)] # Poission distribution
+    rentProb = [(RENT_RATE**n) / math.factorial(n) * math.exp(-RENT_RATE) for n in range(available)] # Poisson distribution
     rentProb.append(1-sum(rentProb)) # Customers equal or exceed available cars
     return rentProb
 
