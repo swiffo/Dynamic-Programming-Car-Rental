@@ -18,8 +18,8 @@ TRANSFER_COST = 2
 
 class RentalBranch:
     """Car rental branch. It has a maximum capacity of cars (maxCapacity), cars which are available for hire (available)
-and cars which need one day of service before they become available (queued).
-"""
+    and cars which need one day of service before they become available (queued).
+    """
     def __init__(self, maxCapacity, available, queued):
         self.maxCapacity = maxCapacity
         self.available = available
@@ -27,7 +27,8 @@ and cars which need one day of service before they become available (queued).
 
     def transferCars(self, carTransfers):
         """Transfer cars in and out. If carTransfer > 0, add cars, otherwise remove.
-Raises exception if more cars are attempted removed than are available."""
+        Raises exception if more cars are attempted removed than are available.
+        """
 
         if carTransfers < 0:
             # When removing cars, make sure we don't go below 0 (if so raise exception)
@@ -49,7 +50,11 @@ Raises exception if more cars are attempted removed than are available."""
     def __hash__(self):
         return hash((self.maxCapacity, self.available, self.queued))
 
-class NotEnoughCarsException(BaseException):
+class Error(Exception):
+    """Base exception for the script"""
+    pass
+
+class NotEnoughCarsException(Error):
     """Signifies insufficient cars in rental lot for intended operation."""    
     pass
 
@@ -79,9 +84,9 @@ class State:
 class Policy:
     """A policy for transferring cars between rental branches.
 
-Essentially a dictionary which maps states to an amount of cars to transfer from branch A to B. Negative numbers
-signify a net transfer from B to A.
-"""
+    Essentially a dictionary which maps states to an amount of cars to transfer from branch A to B. Negative numbers
+    signify a net transfer from B to A.
+    """
 
     def __init__(self, maxCapacity):
         self.maxCapacity = maxCapacity # We model the policy as a sparse map so we need maxCapacity to know what the limits are
@@ -187,11 +192,11 @@ def rentalProbabilities(available):
 def printPolicy(policy):
     """ASCII representation of the policy.
 
-Shows a matrix of the transfers to be made given the available cars in the two branches (A vertical, B horizontal).
-The policy is shown for 0 queued cars.
+    Shows a matrix of the transfers to be made given the available cars in the two branches (A vertical, B horizontal).
+    The policy is shown for 0 queued cars.
 
-Transfer values are shown as absolutes (to fit everything below 10 in a single cell).
-"""
+    Transfer values are shown as absolutes (to fit everything below 10 in a single cell).
+    """
     printRows = []
     maxCapacity = policy.maxCapacity
     for availableA in range(maxCapacity, -1, -1):
