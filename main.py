@@ -17,38 +17,38 @@ TRANSFER_COST = 2
 ##    currently being serviced and will be ready for rental the next day.
 
 class RentalBranch:
-    """Car rental branch. It has a maximum capacity of cars (maxCapacity), cars which are available for hire (available)
+    """Car rental branch. It has a maximum capacity of cars (max_capacity), cars which are available for hire (available)
     and cars which need one day of service before they become available (queued).
     """
-    def __init__(self, maxCapacity, available, queued):
-        self.maxCapacity = maxCapacity
+    def __init__(self, max_capacity, available, queued):
+        self.max_capacity = max_capacity
         self.available = available
         self.queued = queued
 
-    def transferCars(self, carTransfers):
+    def transfer_cars(self, car_transfers):
         """Transfer cars in and out. If carTransfer > 0, add cars, otherwise remove.
         Raises exception if more cars are attempted removed than are available.
         """
 
-        if carTransfers < 0:
+        if car_transfers < 0:
             # When removing cars, make sure we don't go below 0 (if so raise exception)
-            if self.available + carTransfers < 0:
+            if self.available + car_transfers < 0:
                 raise NotEnoughCarsException() 
             else:                
-                self.available += carTransfers
+                self.available += car_transfers
         else:
             # When adding cars, cars exceeding the maximum capacity are thrown into a giant trash compactor
-            freeSpots = self.maxCapacity - self.available - self.queued
-            self.available += min(carTransfers, freeSpots)
+            free_spots = self.max_capacity - self.available - self.queued
+            self.available += min(car_transfers, free_spots)
 
     def __repr__(self):
-        return "RentalBranch({0}, {1}, {2})".format(self.maxCapacity, self.available, self.queued)
+        return "RentalBranch({0}, {1}, {2})".format(self.max_capacity, self.available, self.queued)
 
     def __eq__(self, other):
-        return self.maxCapacity == other.maxCapacity and self.available == other.available and self.queued == other.queued
+        return self.max_capacity == other.max_capacity and self.available == other.available and self.queued == other.queued
 
     def __hash__(self):
-        return hash((self.maxCapacity, self.available, self.queued))
+        return hash((self.max_capacity, self.available, self.queued))
 
 class Error(Exception):
     """Base exception for the script"""
@@ -68,7 +68,7 @@ class State:
 
     def __repr__(self):
         return "State(({0},{1},{2}), ({3},{4},{5}))".format(
-            self.branchA.maxCapacity, self.branchA.available, self.branchA.queued, self.branchB.maxCapacity, self.branchB.available, self.branchB.queued)
+            self.branchA.max_capacity, self.branchA.available, self.branchA.queued, self.branchB.max_capacity, self.branchB.available, self.branchB.queued)
 
     def __eq__(self, other):
         return self.branchA == other.branchA and self.branchB == other.branchB
@@ -88,8 +88,8 @@ class Policy:
     signify a net transfer from B to A.
     """
 
-    def __init__(self, maxCapacity):
-        self.maxCapacity = maxCapacity # We model the policy as a sparse map so we need maxCapacity to know what the limits are
+    def __init__(self, max_capacity):
+        self.max_capacity = max_capacity # We model the policy as a sparse map so we need max_capacity to know what the limits are
         self.stateToActionMap = dict()
 
     def __getitem__(self, key):
@@ -107,47 +107,47 @@ class ValueMap:
     """Map (dictionary) of state to estimated dollar value"""
     
     def __init__(self):
-        self.valueMap = dict() # State instance to value
+        self.value_map = dict() # State instance to value
 
-    def randomInitialization(self, maxCapacity):
-        for totalA in range(maxCapacity+1):
+    def random_initialization(self, max_capacity):
+        for totalA in range(max_capacity+1):
             for qA in range(totalA+1):
-                branchA = RentalBranch(maxCapacity, totalA-qA, qA)
-                for totalB in range(maxCapacity+1):
+                branchA = RentalBranch(max_capacity, totalA-qA, qA)
+                for totalB in range(max_capacity+1):
                     for qB in range(totalB+1):
-                        branchB = RentalBranch(maxCapacity, totalB-qB, qB)
-                        self.valueMap[State(branchA, branchB)] = random.uniform(0,10)
+                        branchB = RentalBranch(max_capacity, totalB-qB, qB)
+                        self.value_map[State(branchA, branchB)] = random.uniform(0, 10)
 
     def __getitem__(self, key):
-        return self.valueMap[key]
+        return self.value_map[key]
 
     def __setitem__(self, key, value):
-        self.valueMap[key]=value
+        self.value_map[key]=value
 
 
 ##    Finally, we need algorithms for evaluating the value of of states and actions
 ##    under given state value estimates and policies. In writing these algorithms
 ##    it is very handy to have iteraters over all possible states and actions.
 
-def stateIter(maxCapacity):
+def state_iter(max_capacity):
     """Iterator over all possible states for two branches with specified maximum capacity"""
-    for totalA in range(maxCapacity+1): 
+    for totalA in range(max_capacity+1): 
         for queuedA in range(totalA+1):
-            branchA = RentalBranch(maxCapacity, totalA-queuedA, queuedA)
-            for totalB in range(maxCapacity+1):
+            branchA = RentalBranch(max_capacity, totalA-queuedA, queuedA)
+            for totalB in range(max_capacity+1):
                 for queuedB in range(totalB+1):
-                    branchB = RentalBranch(maxCapacity, totalB-queuedB, queuedB)
+                    branchB = RentalBranch(max_capacity, totalB-queuedB, queuedB)
                     yield State(branchA, branchB)
                     
-def actionIter(state):
+def action_iter(state):
     """Iterator over the transfers from A to B"""
     return range(-state.branchB.available, state.branchA.available+1)
 
-def estimateStateValue(state, valueMap, policy):
+def estimate_state_value(state, value_map, policy):
     """Estimate the value of a state given the values of other states and a policy"""
-    return estimateActionValue(state, policy[state], valueMap)
+    return estimate_action_value(state, policy[state], value_map)
 
-def estimateActionValue(state, action, valueMap):
+def estimate_action_value(state, action, value_map):
     """Estimate the value of a state/action pair given the values of the other states"""
 
     ##    The estimated value of a (state, action) pair is found as follows:
@@ -163,33 +163,33 @@ def estimateActionValue(state, action, valueMap):
     branchB = copy.copy(state.branchB)
 
     # Transfer cars and record transfer costs
-    Income = - TRANSFER_COST * abs(action) # We always pay so it's always non-positive
+    income = - TRANSFER_COST * abs(action) # We always pay so it's always non-positive
     try:
-        branchA.transferCars(-action)
-        branchB.transferCars(action)
+        branchA.transfer_cars(-action)
+        branchB.transfer_cars(action)
     except NotEnoughCarsException:
         return BAD_MOVE_COST
 
     # Construct probabilities for each rental scenario. Note that if customer count exceeds
     # the number of available cars, we turn away the extra customers.
-    rentProbA = rentalProbabilities(branchA.available)
-    rentProbB = rentalProbabilities(branchB.available)
+    rent_probA = rental_probabilities(branchA.available)
+    rent_probB = rental_probabilities(branchB.available)
 
-    for (custA, probA) in enumerate(rentProbA):
-        newBranchA = RentalBranch(branchA.maxCapacity, branchA.available - custA + branchA.queued, custA)
-        for (custB, probB) in enumerate(rentProbB):
-            newBranchB = RentalBranch(branchB.maxCapacity, branchB.available - custB + branchB.queued, custB)
-            Income += probA*probB*( (custA+custB)*RENTAL_INCOME + DISCOUNT_RATE*valueMap[State(newBranchA, newBranchB)] )
+    for (custA, probA) in enumerate(rent_probA):
+        newBranchA = RentalBranch(branchA.max_capacity, branchA.available - custA + branchA.queued, custA)
+        for (custB, probB) in enumerate(rent_probB):
+            newBranchB = RentalBranch(branchB.max_capacity, branchB.available - custB + branchB.queued, custB)
+            income += probA*probB*( (custA+custB)*RENTAL_INCOME + DISCOUNT_RATE*value_map[State(newBranchA, newBranchB)] )
 
-    return Income
+    return income
 
-def rentalProbabilities(available):
+def rental_probabilities(available):
     """List of probabilities for number of cars rented out. Index signifies number of cars, value is probability."""
-    rentProb = [(RENT_RATE**n) / math.factorial(n) * math.exp(-RENT_RATE) for n in range(available)] # Poisson distribution
-    rentProb.append(1-sum(rentProb)) # Customers equal or exceed available cars
-    return rentProb
+    rent_prob = [(RENT_RATE**n) / math.factorial(n) * math.exp(-RENT_RATE) for n in range(available)] # Poisson distribution
+    rent_prob.append(1-sum(rent_prob)) # Customers equal or exceed available cars
+    return rent_prob
 
-def printPolicy(policy):
+def print_policy(policy):
     """ASCII representation of the policy.
 
     Shows a matrix of the transfers to be made given the available cars in the two branches (A vertical, B horizontal).
@@ -197,51 +197,51 @@ def printPolicy(policy):
 
     Transfer values are shown as absolutes (to fit everything below 10 in a single cell).
     """
-    printRows = []
-    maxCapacity = policy.maxCapacity
-    for availableA in range(maxCapacity, -1, -1):
-        branchA = RentalBranch(maxCapacity, availableA, 0)
-        states = [State(branchA, RentalBranch(maxCapacity, availableB, 0)) for availableB in range(0, maxCapacity+1)]
+    print_rows = []
+    max_capacity = policy.max_capacity
+    for availableA in range(max_capacity, -1, -1):
+        branchA = RentalBranch(max_capacity, availableA, 0)
+        states = [State(branchA, RentalBranch(max_capacity, availableB, 0)) for availableB in range(0, max_capacity+1)]
         transfers = [str(abs(policy[s])) for s in states]
-        printRows.append(''.join(transfers))
+        print_rows.append(''.join(transfers))
 
-    print('\n'.join(printRows))
+    print('\n'.join(print_rows))
         
 
-def main(maxCapacity):
-    valueChangeThreshold = 1
-    policyChanged = True
+def main(max_capacity):
+    value_change_threshold = 1
+    policy_changed = True
 
-    valueMap = ValueMap()
-    valueMap.randomInitialization(maxCapacity)
-    policy = Policy(maxCapacity)
+    value_map = ValueMap()
+    value_map.random_initialization(max_capacity)
+    policy = Policy(max_capacity)
 
-    while policyChanged:
+    while policy_changed:
         # Update the value map to fit with the new policy
         print("*** Evaluating value map ***")
-        maxValueChange = valueChangeThreshold+1
-        while maxValueChange > valueChangeThreshold:
-            maxValueChange = 0
-            for state in stateIter(maxCapacity):
-                oldValue = valueMap[state]
-                newValue = estimateStateValue(state, valueMap, policy)
-                valueMap[state] = newValue
-                maxValueChange = max(maxValueChange, abs(newValue-oldValue))
+        max_value_change = value_change_threshold+1
+        while max_value_change > value_change_threshold:
+            max_value_change = 0
+            for state in state_iter(max_capacity):
+                old_value = value_map[state]
+                new_value = estimate_state_value(state, value_map, policy)
+                value_map[state] = new_value
+                max_value_change = max(max_value_change, abs(new_value-old_value))
 
         # Update the policy again
         print("*** Updating policy ***")
-        policyChanged = False
+        policy_changed = False
 
-        for state in stateIter(maxCapacity):
-            actionVals = [(a, estimateActionValue(state, a, valueMap)) for a in actionIter(state)]
+        for state in state_iter(max_capacity):
+            actionVals = [(a, estimate_action_value(state, a, value_map)) for a in action_iter(state)]
             best = max(actionVals, key=lambda e: e[1])
             if policy[state] != best[0]: # HORRORS if multiple best actions and we switch back and forth
-                policyChanged=True
+                policy_changed=True
                 policy[state]=best[0]
-                oldState = state
+                old_state = state
 
     print('\n\n**********************\n\n')
-    printPolicy(policy)
+    print_policy(policy)
                 
     
                 
